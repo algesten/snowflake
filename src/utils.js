@@ -1,7 +1,5 @@
 const fs = require('fs').promises;
 const path = require('path');
-const crypto = require('crypto');
-const https = require('https');
 const { execFileSync } = require('child_process');
 
 // ----- GitHub Actions Toolkit replacements -----
@@ -58,76 +56,88 @@ const core = {
     }
 };
 
-// Simple replacement for GitHub API operations needed
-const github = {
-    context: {
-        repo: {
-            owner: process.env.GITHUB_REPOSITORY_OWNER || '',
-            repo: process.env.GITHUB_REPOSITORY?.split('/')[1] || '',
-        },
-        payload: {
-            pull_request: process.env.GITHUB_REF?.startsWith('refs/pull/') ? {
-                head: {
-                    sha: process.env.GITHUB_SHA || ''
-                }
-            } : null
-        }
-    },
-    getOctokit: (token) => ({
-        rest: {
-            checks: {
-                create: async (params) => {
-                    // Simple implementation to post a check run
-                    // This would normally make a GitHub API call
-                    return postToGitHub(`/repos/${params.owner}/${params.repo}/check-runs`, token, {
-                        name: params.name,
-                        head_sha: params.head_sha,
-                        status: params.status,
-                        conclusion: params.conclusion,
-                        output: params.output
-                    });
-                }
-            }
-        }
-    })
-};
+// Get changed files and line numbers in a PR using the event payload
+async function getPullRequestChanges() {
+    if (!process.env.GITHUB_EVENT_NAME?.includes('pull_request')) {
+        return null; // Not a PR event
+    }
 
-// Helper function to post to GitHub API
-async function postToGitHub(endpoint, token, data) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'api.github.com',
-            path: endpoint,
-            method: 'POST',
-            headers: {
-                'Authorization': `token ${token}`,
-                'User-Agent': 'snowflake-action',
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
-            }
+    try {
+        // For PR-only checking, we use the git diff command instead of the GitHub API
+        // This avoids the need for a GitHub token
+        const prNumber = process.env.GITHUB_REF?.split('/')[2]; // Extract PR number from refs/pull/123/merge
+
+        if (!prNumber) {
+            console.warn('Could not determine PR number from environment');
+            return null;
+        }
+
+        // Use git commands to get changed files (simplified implementation)
+        // This works because GitHub Actions checks out the PR merge commit
+        // Compare the current commit with base branch
+        const baseRef = execFileSync('git', ['show', '--format=%P', '-s', 'HEAD'], { encoding: 'utf8' }).trim().split(' ')[0];
+        const diff = execFileSync('git', ['diff', '--unified=0', baseRef, 'HEAD'], { encoding: 'utf8' });
+
+        return parseDiff(diff);
+    } catch (error) {
+        console.warn(`Failed to get PR changes: ${error.message}`);
+        return null; // Return null on failure
+    }
+}
+
+// Simple diff parser to extract changed files and line numbers
+function parseDiff(diff) {
+    const changedFiles = {};
+
+    // Split the diff by file sections
+    const fileSections = diff.split(/^diff --git /m).slice(1);
+
+    for (const section of fileSections) {
+        // Extract the file path
+        const fileMatch = section.match(/^a\/(.+?) b\//m);
+        if (!fileMatch) continue;
+
+        const filePath = fileMatch[1];
+        changedFiles[filePath] = {
+            additions: [],
+            deletions: []
         };
 
-        const req = https.request(options, (res) => {
-            let responseData = '';
-            res.on('data', (chunk) => {
-                responseData += chunk;
-            });
-            res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    resolve(JSON.parse(responseData));
-                } else {
-                    reject(new Error(`GitHub API error: ${res.statusCode} ${responseData}`));
+        // Extract the hunk headers and changed lines
+        const hunks = section.split(/^@@/m).slice(1);
+
+        for (const hunk of hunks) {
+            // Parse the hunk header to get line numbers
+            const headerMatch = hunk.match(/^ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/);
+            if (!headerMatch) continue;
+
+            const oldStart = parseInt(headerMatch[1], 10);
+            const newStart = parseInt(headerMatch[3], 10);
+
+            // Split the hunk by lines and process each line
+            const lines = hunk.split('\n').slice(1);
+            let oldLineNumber = oldStart;
+            let newLineNumber = newStart;
+
+            for (const line of lines) {
+                if (line.startsWith('+')) {
+                    // Added line
+                    changedFiles[filePath].additions.push(newLineNumber);
+                    newLineNumber++;
+                } else if (line.startsWith('-')) {
+                    // Removed line
+                    changedFiles[filePath].deletions.push(oldLineNumber);
+                    oldLineNumber++;
+                } else if (!line.startsWith('\\')) {
+                    // Context line (not a "No newline at end of file" marker)
+                    oldLineNumber++;
+                    newLineNumber++;
                 }
-            });
-        });
+            }
+        }
+    }
 
-        req.on('error', (error) => {
-            reject(error);
-        });
-
-        req.write(JSON.stringify(data));
-        req.end();
-    });
+    return changedFiles;
 }
 
 // ----- glob/minimatch replacements -----
@@ -200,94 +210,8 @@ function matchFilePattern(filename, pattern) {
     return false;
 }
 
-// Get changed files and line numbers in a PR
-async function getPullRequestChanges(octokit) {
-    if (!process.env.GITHUB_EVENT_NAME?.includes('pull_request')) {
-        return null; // Not a PR event
-    }
-
-    const context = github.context;
-
-    try {
-        // Get the PR diff
-        const response = await octokit.rest.pulls.get({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            pull_number: context.payload.pull_request.number,
-            mediaType: {
-                format: 'diff'
-            }
-        });
-
-        // Parse the diff to extract changed files and line numbers
-        const diff = response.data;
-        const changedFiles = parseDiff(diff);
-
-        return changedFiles;
-    } catch (error) {
-        console.warn(`Failed to get PR changes: ${error.message}`);
-        return null; // Return null on failure
-    }
-}
-
-// Simple diff parser to extract changed files and line numbers
-function parseDiff(diff) {
-    const changedFiles = {};
-
-    // Split the diff by file sections
-    const fileSections = diff.split(/^diff --git /m).slice(1);
-
-    for (const section of fileSections) {
-        // Extract the file path
-        const fileMatch = section.match(/^a\/(.+?) b\//m);
-        if (!fileMatch) continue;
-
-        const filePath = fileMatch[1];
-        changedFiles[filePath] = {
-            additions: [],
-            deletions: []
-        };
-
-        // Extract the hunk headers and changed lines
-        const hunks = section.split(/^@@/m).slice(1);
-
-        for (const hunk of hunks) {
-            // Parse the hunk header to get line numbers
-            const headerMatch = hunk.match(/^ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/);
-            if (!headerMatch) continue;
-
-            const oldStart = parseInt(headerMatch[1], 10);
-            const newStart = parseInt(headerMatch[3], 10);
-
-            // Split the hunk by lines and process each line
-            const lines = hunk.split('\n').slice(1);
-            let oldLineNumber = oldStart;
-            let newLineNumber = newStart;
-
-            for (const line of lines) {
-                if (line.startsWith('+')) {
-                    // Added line
-                    changedFiles[filePath].additions.push(newLineNumber);
-                    newLineNumber++;
-                } else if (line.startsWith('-')) {
-                    // Removed line
-                    changedFiles[filePath].deletions.push(oldLineNumber);
-                    oldLineNumber++;
-                } else if (!line.startsWith('\\')) {
-                    // Context line (not a "No newline at end of file" marker)
-                    oldLineNumber++;
-                    newLineNumber++;
-                }
-            }
-        }
-    }
-
-    return changedFiles;
-}
-
 module.exports = {
     core,
-    github,
     globFiles,
     matchFilePattern,
     getPullRequestChanges
