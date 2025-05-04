@@ -1,7 +1,6 @@
-const core = require('@actions/core');
-const glob = require('@actions/glob');
 const fs = require('fs').promises;
-const minimatch = require('minimatch');
+const path = require('path');
+const { core, matchFilePattern, globFiles } = require('./utils');
 
 // Parse line width rules from input string
 function parseLineWidthRules(rulesStr) {
@@ -32,8 +31,8 @@ function parseLineWidthRules(rulesStr) {
 
 // Check line width for all files
 async function checkLineWidth(rules, rootDir = '.') {
-    const globber = await glob.create(`${rootDir}/**/*`, { followSymbolicLinks: false });
-    const files = await globber.glob();
+    // Find all files in the rootDir using the globFiles utility
+    const files = await globFiles('**/*', rootDir);
 
     const violations = [];
     let success = true;
@@ -49,7 +48,8 @@ async function checkLineWidth(rules, rootDir = '.') {
             // Find matching rule
             let maxWidth = rules.default;
             for (const { pattern, width } of rules.patterns) {
-                if (minimatch.minimatch(file, pattern, { matchBase: true })) {
+                const filename = path.basename(file);
+                if (matchFilePattern(filename, pattern)) {
                     maxWidth = width;
                     break;
                 }

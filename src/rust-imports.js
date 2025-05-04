@@ -1,7 +1,6 @@
-const core = require('@actions/core');
-const glob = require('@actions/glob');
 const fs = require('fs').promises;
 const path = require('path');
+const { core, globFiles } = require('./utils');
 
 // Check Rust import style
 async function checkRustImports(rootPath = '.') {
@@ -13,8 +12,7 @@ async function checkRustImports(rootPath = '.') {
     const stats = await fs.stat(rootPath);
     if (stats.isDirectory()) {
         // If directory, get all .rs files
-        const globber = await glob.create(`${rootPath}/**/*.rs`, { followSymbolicLinks: false });
-        files = await globber.glob();
+        files = await globFiles('**/*.rs', rootPath);
     } else if (stats.isFile() && rootPath.endsWith('.rs')) {
         // If it's a single Rust file
         files = [rootPath];

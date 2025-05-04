@@ -1,5 +1,4 @@
-const core = require('@actions/core');
-const github = require('@actions/github');
+const { core, github } = require('./src/utils');
 const { parseLineWidthRules, checkLineWidth } = require('./src/line-width');
 const { checkRustImports } = require('./src/rust-imports');
 
