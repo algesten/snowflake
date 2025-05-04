@@ -3,7 +3,7 @@ const mockFs = require('mock-fs');
 const path = require('path');
 const { checkRustImports } = require('../src/rust-imports');
 
-describe('Rust Import Style Checker', () => {
+describe('Rust import multi-lineer', () => {
     beforeEach(() => {
         // Set up mock file system
         mockFs({

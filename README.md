@@ -2,8 +2,8 @@
 
 A GitHub Action that runs code quality checks on both Pull Requests and Push events:
 
-1. **Line Width Check**: Ensures files adhere to maximum line width rules
-2. **Rust Import Style Check**: Prevents multi-line use statements in Rust code
+1. **Line width check**: Ensures files adhere to maximum line width rules
+2. **Rust import multi-line**: Prevents multi-line use statements in Rust code
 
 ## Usage
 
@@ -64,7 +64,7 @@ For example:
 - `*.md:110` - All markdown files have a max width of 110 characters
 - `DEFAULT=110` - All other files have a max width of 110 characters
 
-## Rust Import Style Check
+## Rust import multi-line
 
 This check enforces the following style for Rust imports:
 

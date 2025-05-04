@@ -37,9 +37,9 @@ async function run() {
 
         // Report results in logs
         if (lineWidthResults.success) {
-            console.log('✅ Line Width Check passed');
+            console.log('✅ Line width check passed');
         } else {
-            console.log(`❌ Line Width Check failed with ${lineWidthResults.violations.length} violations`);
+            console.log(`❌ Line width check failed with ${lineWidthResults.violations.length} violations`);
             // Log a sample of the violations
             lineWidthResults.violations.slice(0, 5).forEach(violation => {
                 console.log(`  - ${violation.file}:${violation.line} (${violation.length} chars, max: ${violation.maxWidth})`);
@@ -50,9 +50,9 @@ async function run() {
         }
 
         if (rustImportResults.success) {
-            console.log('✅ Rust Import Style Check passed');
+            console.log('✅ Rust import multi-line passed');
         } else {
-            console.log(`❌ Rust Import Style Check failed with ${rustImportResults.violations.length} violations`);
+            console.log(`❌ Rust import multi-line failed with ${rustImportResults.violations.length} violations`);
             // Log a sample of the violations
             rustImportResults.violations.slice(0, 5).forEach(violation => {
                 console.log(`  - ${violation.file}:${violation.lineStart}-${violation.lineEnd}`);
@@ -68,7 +68,7 @@ async function run() {
 
             // Add line width violations details
             if (!lineWidthResults.success) {
-                errorMessage += `\nLine Width Check failed with ${lineWidthResults.violations.length} violations:\n`;
+                errorMessage += `\nLine width check failed with ${lineWidthResults.violations.length} violations:\n`;
 
                 // Include up to 5 violations in the error message for line width
                 lineWidthResults.violations.slice(0, 5).forEach(violation => {
@@ -82,7 +82,7 @@ async function run() {
 
             // Add Rust import violations details
             if (!rustImportResults.success) {
-                errorMessage += `\nRust Import Style Check failed with ${rustImportResults.violations.length} violations:\n`;
+                errorMessage += `\nRust import multi-line failed with ${rustImportResults.violations.length} violations:\n`;
 
                 // Include up to 5 violations in the error message for Rust imports
                 rustImportResults.violations.slice(0, 5).forEach(violation => {
@@ -92,6 +92,14 @@ async function run() {
                 if (rustImportResults.violations.length > 5) {
                     errorMessage += `  ...and ${rustImportResults.violations.length - 5} more violations\n`;
                 }
+                errorMessage += `INCORRECT:\n`;
+                errorMessage += `  use path::to::{\n`;
+                errorMessage += `    Item1, Item2,\n`;
+                errorMessage += `    Item3\n`;
+                errorMessage += `  }\n`;
+                errorMessage += `CORRECT:\n`;
+                errorMessage += `  use path::to::{Item1, Item2}\n`;
+                errorMessage += `  use path::to::Item3;\n`;
             }
 
             core.setFailed(errorMessage);

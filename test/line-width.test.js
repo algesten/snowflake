@@ -34,7 +34,7 @@ describe('Line Width Rules Parser', () => {
     });
 });
 
-describe('Line Width Checker', () => {
+describe('Line width checker', () => {
     describe('parseLineWidthRules', () => {
         it('should parse line width rules string correctly', () => {
             const rulesStr = 'CHANGELOG.md:80;*.md:110;*.rs:110;*.toml:110;DEFAULT=120';
