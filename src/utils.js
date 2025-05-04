@@ -27,6 +27,18 @@ const core = {
             // Use the new approach if running in GitHub Actions
             const fs = require('fs');
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Error\n${message}\n`);
+
+            // Also log to console for immediate visibility in logs
+            console.error(`::error::${message.split('\n')[0]}`);
+
+            // If the message has multiple lines, log them in a more readable format
+            if (message.includes('\n')) {
+                console.error('\nDetails:');
+                message.split('\n').slice(1).forEach(line => {
+                    if (line.trim()) console.error(`  ${line}`);
+                });
+            }
+
             process.exit(1);
         } else {
             // Fallback for local testing or older GitHub Actions runners

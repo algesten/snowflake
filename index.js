@@ -28,7 +28,37 @@ async function run() {
 
         // Fail the action if any checks failed
         if (!lineWidthResults.success || !rustImportResults.success) {
-            core.setFailed('One or more checks failed');
+            let errorMessage = 'One or more checks failed:\n';
+
+            // Add line width violations details
+            if (!lineWidthResults.success) {
+                errorMessage += `\nLine Width Check failed with ${lineWidthResults.violations.length} violations:\n`;
+
+                // Include up to 5 violations in the error message for line width
+                lineWidthResults.violations.slice(0, 5).forEach(violation => {
+                    errorMessage += `- ${violation.file}:${violation.line} (${violation.length} chars, max: ${violation.maxWidth})\n`;
+                });
+
+                if (lineWidthResults.violations.length > 5) {
+                    errorMessage += `  ...and ${lineWidthResults.violations.length - 5} more violations\n`;
+                }
+            }
+
+            // Add Rust import violations details
+            if (!rustImportResults.success) {
+                errorMessage += `\nRust Import Style Check failed with ${rustImportResults.violations.length} violations:\n`;
+
+                // Include up to 5 violations in the error message for Rust imports
+                rustImportResults.violations.slice(0, 5).forEach(violation => {
+                    errorMessage += `- ${violation.file}:${violation.lineStart}-${violation.lineEnd}\n`;
+                });
+
+                if (rustImportResults.violations.length > 5) {
+                    errorMessage += `  ...and ${rustImportResults.violations.length - 5} more violations\n`;
+                }
+            }
+
+            core.setFailed(errorMessage);
         }
     } catch (error) {
         core.setFailed(`Action failed with error: ${error.message}`);
