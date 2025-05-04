@@ -1,6 +1,6 @@
 # PR Code Quality Checks
 
-A GitHub Action that runs code quality checks on Pull Requests:
+A GitHub Action that runs code quality checks on both Pull Requests and Push events:
 
 1. **Line Width Check**: Ensures files adhere to maximum line width rules
 2. **Rust Import Style Check**: Prevents multi-line use statements in Rust code
@@ -14,6 +14,8 @@ name: Code Quality
 
 on:
   pull_request:
+    branches: [ main, master ]
+  push:
     branches: [ main, master ]
 
 jobs:
@@ -38,6 +40,7 @@ jobs:
 |-------|-------------|----------|---------|
 | `github_token` | GitHub token for creating check runs | Yes | `${{ github.token }}` |
 | `line_width_rules` | Rules for max line width in format: `file_pattern:width;file_pattern:width` | No | `CHANGELOG.md:80;*.md:110;*.rs:110;*.toml:110;DEFAULT=110` |
+| `check_diff` | If true, only checks files and lines changed in the current event (PR or push) | No | `true` |
 
 ## Outputs
 

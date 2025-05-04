@@ -63,26 +63,119 @@ async function getPullRequestChanges() {
     }
 
     try {
-        // For PR-only checking, we use the git diff command instead of the GitHub API
-        // This avoids the need for a GitHub token
-        const prNumber = process.env.GITHUB_REF?.split('/')[2]; // Extract PR number from refs/pull/123/merge
+        // For PR-only checking, we need to get the base and head commits
+        // First, try to get a proper base ref using common GitHub environment variables
+        let baseRef;
 
-        if (!prNumber) {
-            console.warn('Could not determine PR number from environment');
-            return null;
+        try {
+            // Try to get the PR base ref directly from the GITHUB_BASE_REF env var
+            if (process.env.GITHUB_BASE_REF) {
+                // If available, get the SHA of the base ref
+                baseRef = execFileSync('git', ['rev-parse', `origin/${process.env.GITHUB_BASE_REF}`], { encoding: 'utf8' }).trim();
+            } else {
+                // Fallback: try to get it from the merge commit's parents
+                baseRef = execFileSync('git', ['show', '--format=%P', '-s', 'HEAD'], { encoding: 'utf8' }).trim().split(' ')[0];
+            }
+
+            if (!baseRef) {
+                throw new Error('Could not determine base ref');
+            }
+
+            // Get the diff between the base and head commits
+            const diff = execFileSync('git', ['diff', '--unified=0', baseRef, 'HEAD'], { encoding: 'utf8' });
+            return parseDiff(diff);
+        } catch (error) {
+            // If we failed to get the base ref or the diff, try an alternative approach
+            console.warn(`Failed with first approach: ${error.message}`);
+
+            // Alternative approach: get the list of changed files from git
+            const filesOutput = execFileSync('git', ['diff', '--name-only', 'HEAD^', 'HEAD'], { encoding: 'utf8' }).trim();
+            const changedFiles = filesOutput.split('\n').filter(Boolean);
+
+            // For each file, get its diff
+            const changes = {};
+            for (const file of changedFiles) {
+                try {
+                    // Get the diff for this specific file
+                    const fileDiff = execFileSync('git', ['diff', '--unified=0', 'HEAD^', 'HEAD', '--', file], { encoding: 'utf8' });
+                    const parsedChanges = parseDiff(fileDiff);
+
+                    // Merge the changes into our result
+                    Object.assign(changes, parsedChanges);
+                } catch (fileError) {
+                    console.warn(`Failed to get diff for file ${file}: ${fileError.message}`);
+                }
+            }
+
+            return Object.keys(changes).length > 0 ? changes : null;
         }
-
-        // Use git commands to get changed files (simplified implementation)
-        // This works because GitHub Actions checks out the PR merge commit
-        // Compare the current commit with base branch
-        const baseRef = execFileSync('git', ['show', '--format=%P', '-s', 'HEAD'], { encoding: 'utf8' }).trim().split(' ')[0];
-        const diff = execFileSync('git', ['diff', '--unified=0', baseRef, 'HEAD'], { encoding: 'utf8' });
-
-        return parseDiff(diff);
-    } catch (error) {
-        console.warn(`Failed to get PR changes: ${error.message}`);
+    } catch (finalError) {
+        console.warn(`Failed to get PR changes: ${finalError.message}`);
         return null; // Return null on failure
     }
+}
+
+// Get changed files and line numbers in a push event
+async function getPushChanges() {
+    if (!process.env.GITHUB_EVENT_NAME?.includes('push')) {
+        return null; // Not a push event
+    }
+
+    try {
+        // Try multiple strategies to get pushed changes
+        try {
+            // Strategy 1: Compare the current commit with its parent
+            const currentCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+            const parentCommit = execFileSync('git', ['rev-parse', 'HEAD~1'], { encoding: 'utf8' }).trim();
+
+            // Get the diff between the current commit and its parent
+            const diff = execFileSync('git', ['diff', '--unified=0', parentCommit, currentCommit], { encoding: 'utf8' });
+            return parseDiff(diff);
+        } catch (error) {
+            console.warn(`Failed with first push detection approach: ${error.message}`);
+
+            // Strategy 2: If we've checked out a shallow clone, or if this is the first commit
+            // Get a list of changed files in the most recent commit
+            const filesOutput = execFileSync('git', ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'], { encoding: 'utf8' }).trim();
+            const changedFiles = filesOutput.split('\n').filter(Boolean);
+
+            if (changedFiles.length === 0) {
+                console.warn('No changed files found in the current commit');
+                return null;
+            }
+
+            // For each file, try to get its diff relative to the previous version
+            const changes = {};
+            for (const file of changedFiles) {
+                try {
+                    // Get the change content for this file
+                    // We're passing only one commit, so git will show the changes introduced by that commit
+                    const fileDiff = execFileSync('git', ['show', '--unified=0', 'HEAD', '--', file], { encoding: 'utf8' });
+                    const parsedChanges = parseDiff(fileDiff);
+
+                    // Merge the changes into our result
+                    Object.assign(changes, parsedChanges);
+                } catch (fileError) {
+                    console.warn(`Failed to get diff for file ${file}: ${fileError.message}`);
+                }
+            }
+
+            return Object.keys(changes).length > 0 ? changes : null;
+        }
+    } catch (finalError) {
+        console.warn(`Failed to get push changes: ${finalError.message}`);
+        return null; // Return null on failure
+    }
+}
+
+// Get changes based on the event type (PR or push)
+async function getChanges() {
+    if (process.env.GITHUB_EVENT_NAME?.includes('pull_request')) {
+        return getPullRequestChanges();
+    } else if (process.env.GITHUB_EVENT_NAME?.includes('push')) {
+        return getPushChanges();
+    }
+    return null;
 }
 
 // Simple diff parser to extract changed files and line numbers
@@ -214,5 +307,7 @@ module.exports = {
     core,
     globFiles,
     matchFilePattern,
-    getPullRequestChanges
+    getPullRequestChanges,
+    getPushChanges,
+    getChanges
 };

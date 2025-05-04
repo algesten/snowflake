@@ -6,8 +6,8 @@ inputs:
     description: 'Line width rules in format "*.ext:width;DEFAULT=width"'
     required: true
     default: 'CHANGELOG.md:80;*.md:110;*.rs:110;*.toml:110;DEFAULT=110'
-  check_pr_only:
-    description: 'If true, only checks files and lines changed in the PR'
+  check_diff:
+    description: 'If true, only checks files and lines changed in the current event (PR or push)'
     required: false
     default: 'true'
 outputs:

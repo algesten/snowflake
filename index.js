@@ -1,4 +1,4 @@
-const { core, getPullRequestChanges } = require('./src/utils');
+const { core, getChanges } = require('./src/utils');
 const { parseLineWidthRules, checkLineWidth } = require('./src/line-width');
 const { checkRustImports } = require('./src/rust-imports');
 
@@ -6,27 +6,30 @@ async function run() {
     try {
         // Get inputs
         const lineWidthRules = core.getInput('line_width_rules');
-        const checkPROnly = core.getInput('check_pr_only') === 'true';
+        const checkDiff = core.getInput('check_diff') === 'true';
 
         // Parse line width rules
         const rules = parseLineWidthRules(lineWidthRules);
 
-        // Get PR changes if this is a PR event and we're only checking PR changes
-        let prChanges = null;
-        if (checkPROnly && process.env.GITHUB_EVENT_NAME?.includes('pull_request')) {
+        // Get changes if we're only checking changed files/lines
+        let changes = null;
+        if (checkDiff) {
             try {
-                prChanges = await getPullRequestChanges();
-                core.warning(`Checking only files and lines modified in the PR (${Object.keys(prChanges || {}).length} files)`);
+                changes = await getChanges();
+                if (changes) {
+                    const eventType = process.env.GITHUB_EVENT_NAME;
+                    core.warning(`Checking only files and lines modified in the ${eventType} (${Object.keys(changes || {}).length} files)`);
+                }
             } catch (error) {
-                core.warning(`Failed to get PR changes, will check all files: ${error.message}`);
+                core.warning(`Failed to get changes, will check all files: ${error.message}`);
             }
         }
 
         // Check 1: Line width
-        const lineWidthResults = await checkLineWidth(rules, '.', prChanges);
+        const lineWidthResults = await checkLineWidth(rules, '.', changes);
 
         // Check 2: Rust import style
-        const rustImportResults = await checkRustImports('.', prChanges);
+        const rustImportResults = await checkRustImports('.', changes);
 
         // Set outputs
         core.setOutput('line_width_result', lineWidthResults.success ? 'success' : 'failure');
