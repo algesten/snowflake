@@ -13,15 +13,36 @@ const core = {
         return process.env[key] || '';
     },
     setOutput: (name, value) => {
-        // GitHub Actions output commands
-        console.log(`::set-output name=${name}::${value}`);
+        // Use the new GITHUB_OUTPUT environment file approach
+        const fs = require('fs');
+        if (process.env.GITHUB_OUTPUT) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`);
+        } else {
+            // Fallback for local testing or older GitHub Actions runners
+            console.log(`::set-output name=${name}::${value}`);
+        }
     },
     setFailed: (message) => {
-        console.error(`::error::${message}`);
-        process.exit(1);
+        if (process.env.GITHUB_STEP_SUMMARY) {
+            // Use the new approach if running in GitHub Actions
+            const fs = require('fs');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Error\n${message}\n`);
+            process.exit(1);
+        } else {
+            // Fallback for local testing or older GitHub Actions runners
+            console.error(`::error::${message}`);
+            process.exit(1);
+        }
     },
     warning: (message) => {
-        console.warn(`::warning::${message}`);
+        if (process.env.GITHUB_STEP_SUMMARY) {
+            // Use the new approach if running in GitHub Actions
+            const fs = require('fs');
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Warning\n${message}\n`);
+        } else {
+            // Fallback for local testing or older GitHub Actions runners
+            console.warn(`::warning::${message}`);
+        }
     }
 };
 
