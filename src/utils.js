@@ -200,9 +200,95 @@ function matchFilePattern(filename, pattern) {
     return false;
 }
 
+// Get changed files and line numbers in a PR
+async function getPullRequestChanges(octokit) {
+    if (!process.env.GITHUB_EVENT_NAME?.includes('pull_request')) {
+        return null; // Not a PR event
+    }
+
+    const context = github.context;
+
+    try {
+        // Get the PR diff
+        const response = await octokit.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number,
+            mediaType: {
+                format: 'diff'
+            }
+        });
+
+        // Parse the diff to extract changed files and line numbers
+        const diff = response.data;
+        const changedFiles = parseDiff(diff);
+
+        return changedFiles;
+    } catch (error) {
+        console.warn(`Failed to get PR changes: ${error.message}`);
+        return null; // Return null on failure
+    }
+}
+
+// Simple diff parser to extract changed files and line numbers
+function parseDiff(diff) {
+    const changedFiles = {};
+
+    // Split the diff by file sections
+    const fileSections = diff.split(/^diff --git /m).slice(1);
+
+    for (const section of fileSections) {
+        // Extract the file path
+        const fileMatch = section.match(/^a\/(.+?) b\//m);
+        if (!fileMatch) continue;
+
+        const filePath = fileMatch[1];
+        changedFiles[filePath] = {
+            additions: [],
+            deletions: []
+        };
+
+        // Extract the hunk headers and changed lines
+        const hunks = section.split(/^@@/m).slice(1);
+
+        for (const hunk of hunks) {
+            // Parse the hunk header to get line numbers
+            const headerMatch = hunk.match(/^ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/);
+            if (!headerMatch) continue;
+
+            const oldStart = parseInt(headerMatch[1], 10);
+            const newStart = parseInt(headerMatch[3], 10);
+
+            // Split the hunk by lines and process each line
+            const lines = hunk.split('\n').slice(1);
+            let oldLineNumber = oldStart;
+            let newLineNumber = newStart;
+
+            for (const line of lines) {
+                if (line.startsWith('+')) {
+                    // Added line
+                    changedFiles[filePath].additions.push(newLineNumber);
+                    newLineNumber++;
+                } else if (line.startsWith('-')) {
+                    // Removed line
+                    changedFiles[filePath].deletions.push(oldLineNumber);
+                    oldLineNumber++;
+                } else if (!line.startsWith('\\')) {
+                    // Context line (not a "No newline at end of file" marker)
+                    oldLineNumber++;
+                    newLineNumber++;
+                }
+            }
+        }
+    }
+
+    return changedFiles;
+}
+
 module.exports = {
     core,
     github,
     globFiles,
-    matchFilePattern
+    matchFilePattern,
+    getPullRequestChanges
 };

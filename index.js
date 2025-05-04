@@ -1,4 +1,4 @@
-const { core, github } = require('./src/utils');
+const { core, github, getPullRequestChanges } = require('./src/utils');
 const { parseLineWidthRules, checkLineWidth } = require('./src/line-width');
 const { checkRustImports } = require('./src/rust-imports');
 
@@ -8,15 +8,27 @@ async function run() {
         const lineWidthRules = core.getInput('line_width_rules');
         const token = core.getInput('github_token');
         const octokit = github.getOctokit(token);
+        const checkPROnly = core.getInput('check_pr_only') === 'true';
 
         // Parse line width rules
         const rules = parseLineWidthRules(lineWidthRules);
 
+        // Get PR changes if this is a PR event and we're only checking PR changes
+        let prChanges = null;
+        if (checkPROnly && process.env.GITHUB_EVENT_NAME?.includes('pull_request')) {
+            try {
+                prChanges = await getPullRequestChanges(octokit);
+                core.warning(`Checking only files and lines modified in the PR (${Object.keys(prChanges || {}).length} files)`);
+            } catch (error) {
+                core.warning(`Failed to get PR changes, will check all files: ${error.message}`);
+            }
+        }
+
         // Check 1: Line width
-        const lineWidthResults = await checkLineWidth(rules);
+        const lineWidthResults = await checkLineWidth(rules, '.', prChanges);
 
         // Check 2: Rust import style
-        const rustImportResults = await checkRustImports();
+        const rustImportResults = await checkRustImports('.', prChanges);
 
         // Create check runs for both checks
         await createCheckRun(octokit, 'Line Width Check', lineWidthResults);

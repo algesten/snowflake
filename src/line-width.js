@@ -30,12 +30,23 @@ function parseLineWidthRules(rulesStr) {
 }
 
 // Check line width for all files
-async function checkLineWidth(rules, rootDir = '.') {
+async function checkLineWidth(rules, rootDir = '.', prChanges = null) {
     // Find all files in the rootDir using the globFiles utility
-    const files = await globFiles('**/*', rootDir);
+    let files = await globFiles('**/*', rootDir);
 
     const violations = [];
     let success = true;
+
+    // If PR changes are provided, filter files to only include changed files
+    if (prChanges) {
+        const changedFilePaths = Object.keys(prChanges);
+        files = files.filter(file => {
+            // Convert to relative path to match prChanges format
+            const relativePath = path.relative(rootDir, file);
+            return changedFilePaths.some(changedPath =>
+                relativePath === changedPath || relativePath.endsWith(changedPath));
+        });
+    }
 
     for (const file of files) {
         try {
@@ -58,7 +69,19 @@ async function checkLineWidth(rules, rootDir = '.') {
             const content = await fs.readFile(file, 'utf8');
             const lines = content.split('\n');
 
+            // Get the relative path to match prChanges format
+            const relativePath = path.relative(rootDir, file);
+
             for (let i = 0; i < lines.length; i++) {
+                // If we have PR changes, only check lines that were added/modified
+                if (prChanges && prChanges[relativePath]) {
+                    const lineNumber = i + 1;
+                    // Skip if this line wasn't modified in the PR
+                    if (!prChanges[relativePath].additions.includes(lineNumber)) {
+                        continue;
+                    }
+                }
+
                 const line = lines[i];
                 if (line.length > maxWidth) {
                     violations.push({
