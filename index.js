@@ -75,21 +75,31 @@ async function createCheckRun(octokit, name, results) {
         return;
     }
 
-    const checkRunDetails = {
-        owner: context.repo.owner,
-        repo: context.repo.repo,
-        name,
-        head_sha: context.payload.pull_request.head.sha,
-        status: 'completed',
-        conclusion: results.success ? 'success' : 'failure',
-        output: {
-            title: results.success ? `${name} passed` : `${name} failed`,
-            summary: results.summary,
-            text: formatViolations(results.violations, name)
-        }
-    };
+    try {
+        const checkRunDetails = {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            name,
+            head_sha: context.payload.pull_request.head.sha,
+            status: 'completed',
+            conclusion: results.success ? 'success' : 'failure',
+            output: {
+                title: results.success ? `${name} passed` : `${name} failed`,
+                summary: results.summary,
+                text: formatViolations(results.violations, name)
+            }
+        };
 
-    await octokit.rest.checks.create(checkRunDetails);
+        await octokit.rest.checks.create(checkRunDetails);
+    } catch (error) {
+        // Don't fail the whole action if check run creation fails
+        core.warning(`Failed to create check run for ${name}: ${error.message}`);
+        // Still report results in the logs
+        core.warning(`Results for ${name}: ${results.success ? 'PASSED' : 'FAILED'}`);
+        if (!results.success) {
+            core.warning(`${results.violations.length} violations found.`);
+        }
+    }
 }
 
 // Format violations for check run output
