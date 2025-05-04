@@ -1,0 +1,23 @@
+name: 'Snowflake'
+description: 'Github Action to enforce Martin''s snowflake formatting rules'
+author: 'Martin Algesten <martin@algesten.com>'
+inputs:
+  line_width_rules:
+    description: 'Rules for max line width in format: file_pattern:width;file_pattern:width'
+    required: false
+    default: 'CHANGELOG.md:80;*.md:110;*.rs:110;*.toml:110;DEFAULT=110'
+  github_token:
+    description: 'GitHub token for creating check runs'
+    required: true
+    default: ${{ github.token }}
+outputs:
+  line_width_result:
+    description: 'Result of line width check'
+  rust_import_result:
+    description: 'Result of Rust import style check'
+runs:
+  using: 'node20'
+  main: 'index.js'
+branding:
+  icon: 'check-square'
+  color: 'green'

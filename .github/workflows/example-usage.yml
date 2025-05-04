@@ -1,0 +1,20 @@
+name: Code Quality Checks
+
+on:
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  quality-checks:
+    runs-on: ubuntu-latest
+    name: Run code quality checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Code Quality Checks
+        uses: ./ # Uses the action in the root directory
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: Override default line width rules
+          # line_width_rules: 'CHANGELOG.md:80;*.md:110;*.rs:110;*.toml:110;DEFAULT=110'

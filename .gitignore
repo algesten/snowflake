@@ -1,0 +1,56 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Coverage directory and test output
+coverage/
+.nyc_output
+.coverage
+junit.xml
+
+# Environment variables and config
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build output
+dist/
+build/
+lib/
+
+# Package manager files
+package-lock.json
+yarn.lock
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.history/
+*.sublime-workspace
+.project
+.settings/
+
+# Temp files
+tmp/
+.tmp/
+temp/
